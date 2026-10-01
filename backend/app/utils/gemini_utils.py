@@ -16,9 +16,11 @@ try:
 except Exception as e:
     print(f"Error configuring Gemini API: {e}")
 
+import base64
+
 def extract_text_from_all_pdfs(file_records: list) -> str:
     """
-    Accepts file records from the database, downloads each PDF from its URL,
+    Accepts file records from the database, downloads each PDF from its URL (or decodes Data URL),
     and extracts the text.
     """
     full_text = ""
@@ -26,11 +28,16 @@ def extract_text_from_all_pdfs(file_records: list) -> str:
 
     for record in file_records:
         try:
-            print(f"Downloading {record.filename} for insights analysis...")
-            response = requests.get(record.url)
-            response.raise_for_status()
-            
-            pdf_stream = BytesIO(response.content)
+            print(f"Processing {record.filename} for insights analysis...")
+            if record.url and record.url.startswith("data:"):
+                b64_data = record.url.split(",", 1)[1]
+                pdf_bytes = base64.b64decode(b64_data)
+                pdf_stream = BytesIO(pdf_bytes)
+            else:
+                response = requests.get(record.url)
+                response.raise_for_status()
+                pdf_stream = BytesIO(response.content)
+
             reader = PdfReader(pdf_stream)
             
             full_text += f"\n\n--- Content from {record.filename} ---\n"

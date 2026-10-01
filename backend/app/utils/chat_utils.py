@@ -9,9 +9,11 @@ from PyPDF2 import PdfReader
 # This re-uses the configuration from your gemini_utils.py
 # Make sure your API key is set there or as an environment variable.
 
+import base64
+
 def get_pdf_text(file_records: list) -> str:
     """
-    Extracts text from a list of file records by downloading them from their URLs.
+    Extracts text from a list of file records by downloading them from their URLs or decoding Data URLs.
     """
     text = ""
     if not file_records:
@@ -19,11 +21,16 @@ def get_pdf_text(file_records: list) -> str:
 
     for record in file_records:
         try:
-            print(f"Downloading {record.filename} for chat context...")
-            response = requests.get(record.url)
-            response.raise_for_status()
-            
-            pdf_stream = BytesIO(response.content)
+            print(f"Processing {record.filename} for chat context...")
+            if record.url and record.url.startswith("data:"):
+                b64_data = record.url.split(",", 1)[1]
+                pdf_bytes = base64.b64decode(b64_data)
+                pdf_stream = BytesIO(pdf_bytes)
+            else:
+                response = requests.get(record.url)
+                response.raise_for_status()
+                pdf_stream = BytesIO(response.content)
+
             reader = PdfReader(pdf_stream)
             
             text += f"\n\n--- Content from: {record.filename} ---\n"
@@ -38,6 +45,10 @@ def get_chat_response(question: str, context: str) -> str:
     """
     Gets a contextual answer from Gemini based on the user's question and PDF text.
     """
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if api_key:
+        genai.configure(api_key=api_key)
+
     model = genai.GenerativeModel('gemini-1.5-flash')
     
     prompt = f"""

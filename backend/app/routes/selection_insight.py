@@ -17,6 +17,10 @@ async def get_selection_insight(request: SelectionInsightRequest):
         raise HTTPException(status_code=400, detail="Not enough text selected.")
 
     try:
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if api_key:
+            genai.configure(api_key=api_key)
+
         model_name = 'gemini-1.5-flash'
         model = genai.GenerativeModel(model_name)
         

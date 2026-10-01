@@ -7,13 +7,18 @@ from gtts import gTTS
 import google.generativeai as genai
 import requests
 
-AUDIO_DIR = "generated_audio"
+import tempfile
+AUDIO_DIR = os.path.join(tempfile.gettempdir(), "generated_audio")
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
 def generate_podcast_script(context_type: str, text_content: str) -> str:
     """Uses Gemini to convert a block of provided context into a high-quality podcast script."""
     if not text_content.strip():
         return "There is no content to discuss in this podcast."
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if api_key:
+        genai.configure(api_key=api_key)
 
     model_name = 'gemini-1.5-flash'
     model = genai.GenerativeModel(model_name)

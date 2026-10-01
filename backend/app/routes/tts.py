@@ -6,8 +6,8 @@ from pydantic import BaseModel
 
 router = APIRouter()
 
-# Use a relative path that works locally and in Docker
-AUDIO_DIR = "generated_audio"
+import tempfile
+AUDIO_DIR = os.path.join(tempfile.gettempdir(), "generated_audio")
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
 class TTSRequest(BaseModel):

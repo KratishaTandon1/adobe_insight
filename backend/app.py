@@ -69,8 +69,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve generated audio files from a folder in the root directory
-app.mount("/audio", StaticFiles(directory="generated_audio"), name="audio")
+import tempfile
+AUDIO_DIR = os.path.join(tempfile.gettempdir(), "generated_audio")
+os.makedirs(AUDIO_DIR, exist_ok=True)
+
+# Serve generated audio files from writable temp directory
+app.mount("/audio", StaticFiles(directory=AUDIO_DIR), name="audio")
 
 # --- Route includes (these do not need to be changed) ---
 app.include_router(pdf.router, prefix="/api/pdf", tags=["PDFs"])

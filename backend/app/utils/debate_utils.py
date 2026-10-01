@@ -7,8 +7,9 @@ def generate_debate_from_text(text_content: str) -> str:
     Uses Gemini to identify a nuanced topic in the text and generate two
     opposing arguments with evidence, returned as a JSON string.
     """
-    if not text_content.strip():
-        return '{}'
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if api_key:
+        genai.configure(api_key=api_key)
 
     model = genai.GenerativeModel('gemini-1.5-flash')
     

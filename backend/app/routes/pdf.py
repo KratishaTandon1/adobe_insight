@@ -1,7 +1,6 @@
-
-
 import os
-from vercel_blob import put
+import base64
+from vercel_blob import put, delete
 from fastapi import APIRouter, File, UploadFile, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from typing import List
@@ -24,30 +23,42 @@ def get_db():
 @router.post("/upload")
 async def upload_pdfs(files: List[UploadFile] = File(...), db: Session = Depends(get_db)):
     for file in files:
-        # ... (file type and existing file checks)
         try:
-            # Vercel Blob requires reading the file into memory first
             file_contents = await file.read()
+            file_url = None
 
-            # Upload the file to Vercel Blob
-            blob_result = put(
-                f"pdfs/{file.filename}", # The path in the blob store
-                file_contents,
-                {'access': 'public'} # Make the file publicly accessible
-            )
+            # 1. Try Vercel Blob upload
+            try:
+                blob_result = put(
+                    f"pdfs/{file.filename}",
+                    file_contents,
+                    {'access': 'public'}
+                )
+                file_url = blob_result.get('url')
+            except Exception as blob_err:
+                print(f"Vercel blob upload failed, using Data URL fallback: {blob_err}")
 
-            # The result directly gives us the public URL
-            file_url = blob_result['url']
+            # 2. Fallback to Data URL if Blob store is unavailable/unconfigured
+            if not file_url:
+                b64_str = base64.b64encode(file_contents).decode('utf-8')
+                file_url = f"data:application/pdf;base64,{b64_str}"
+
+            # 3. Store record in Database (remove existing duplicate if present)
+            existing = db.query(models.FileRecord).filter(models.FileRecord.filename == file.filename).first()
+            if existing:
+                db.delete(existing)
+                db.commit()
 
             db_file = models.FileRecord(
                 filename=file.filename,
                 url=file_url,
-                public_id=file_url # We can use the URL as the ID for deletion
+                public_id=file.filename
             )
             db.add(db_file)
             db.commit()
 
         except Exception as e:
+            print(f"Error during upload of {file.filename}: {e}")
             raise HTTPException(status_code=500, detail=f"Could not upload {file.filename}: {str(e)}")
 
     return JSONResponse(content={"message": "Upload successful"})
@@ -59,16 +70,17 @@ async def list_pdfs(db: Session = Depends(get_db)):
 
 @router.delete("/delete/{filename}")
 async def delete_pdf(filename: str, db: Session = Depends(get_db)):
-    # Vercel Blob deletion requires the full URL
-    from vercel_blob import delete
-
     db_file = db.query(models.FileRecord).filter(models.FileRecord.filename == filename).first()
     if not db_file:
         raise HTTPException(status_code=404, detail="File not found")
 
     try:
-        delete(db_file.url) # Delete from Vercel Blob using the URL
-        db.delete(db_file) # Delete from our database
+        if db_file.url and db_file.url.startswith("http"):
+            try:
+                delete(db_file.url)
+            except Exception as e:
+                print(f"Could not delete from Vercel Blob: {e}")
+        db.delete(db_file)
         db.commit()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Could not delete file: {str(e)}")
