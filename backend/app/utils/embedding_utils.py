@@ -1,12 +1,11 @@
-
-
-
 import os
+import re
+import json
 import requests
-from sentence_transformers import SentenceTransformer, util
 import fitz  # PyMuPDF
-
-model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import google.generativeai as genai
 
 def extract_sections(file_records: list):
     """
@@ -17,16 +16,13 @@ def extract_sections(file_records: list):
 
     for record in file_records:
         try:
-            # 1. Download the PDF content from the public URL
             print(f"Downloading {record.filename} for analysis...")
             response = requests.get(record.url)
-            response.raise_for_status()  # Raise an exception for bad status codes
+            response.raise_for_status()
             pdf_content = response.content
 
-            # 2. Open the downloaded PDF from memory
             doc = fitz.open(stream=pdf_content, filetype="pdf")
             
-            # 3. Process the document to extract sections
             for page in doc:
                 text = page.get_text()
                 if len(text.strip()) > 100:
@@ -34,7 +30,7 @@ def extract_sections(file_records: list):
                         "text": text.strip(),
                         "source": record.filename,
                         "page": page.number + 1,
-                        "source_url": record.url  # CRUCIAL: Add the URL for the frontend
+                        "source_url": record.url
                     })
             doc.close()
         except Exception as e:
@@ -44,18 +40,49 @@ def extract_sections(file_records: list):
 
 def find_related_sections(persona, task, sections, top_k=5):
     """
-    This function's core logic remains unchanged. It will automatically
-    preserve the 'source_url' field in the results.
+    Finds and ranks related sections using TF-IDF cosine similarity
+    and optional Gemini LLM re-ranking (lightweight and fast).
     """
+    if not sections:
+        return []
+
     query = f"As a {persona}, I want to {task}"
-    query_embedding = model.encode(query, convert_to_tensor=True)
+    texts = [s["text"] for s in sections]
 
-    results = []
-    for section in sections:
-        section_embedding = model.encode(section["text"], convert_to_tensor=True)
-        score = float(util.pytorch_cos_sim(query_embedding, section_embedding)[0][0])
-        section.update({"score": score})
-        results.append(section)
+    try:
+        vectorizer = TfidfVectorizer(stop_words='english').fit_transform([query] + texts)
+        vectors = vectorizer.toarray()
+        query_vec = vectors[0:1]
+        doc_vecs = vectors[1:]
+        scores = cosine_similarity(query_vec, doc_vecs)[0]
 
-    results.sort(key=lambda x: x["score"], reverse=True)
-    return results[:top_k]
+        for idx, section in enumerate(sections):
+            section["score"] = float(scores[idx])
+
+        sections.sort(key=lambda x: x["score"], reverse=True)
+        top_candidates = sections[:max(top_k * 2, 10)]
+
+        # Try Gemini refinement if API key is available
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if api_key:
+            try:
+                genai.configure(api_key=api_key)
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                snippets = [f"[{i}] {s['text'][:200]}" for i, s in enumerate(top_candidates)]
+                prompt = f"Persona: {persona}\nTask: {task}\nSnippets:\n" + "\n".join(snippets) + "\n\nReturn JSON array of relevance scores from 0.0 to 1.0 for each snippet in order, e.g. [0.9, 0.7, ...]"
+                response = model.generate_content(prompt)
+                match = re.search(r'\[[\d\.\s,]+\]', response.text)
+                if match:
+                    parsed_scores = json.loads(match.group(0))
+                    for i, score in enumerate(parsed_scores):
+                        if i < len(top_candidates):
+                            top_candidates[i]["score"] = float(score)
+                    top_candidates.sort(key=lambda x: x["score"], reverse=True)
+            except Exception as ge:
+                print(f"Gemini re-rank fallback: {ge}")
+
+        return top_candidates[:top_k]
+
+    except Exception as e:
+        print(f"Error in find_related_sections: {e}")
+        return sections[:top_k]

@@ -1,9 +1,7 @@
 fastapi
 uvicorn
 pydantic
-sentence-transformers
 scikit-learn
-torch
 PyMuPDF
 python-dotenv
 requests
@@ -15,3 +13,4 @@ typing
 PyPDF2
 google-generativeai
 python-multipart
+networkx
