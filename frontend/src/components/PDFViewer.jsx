@@ -171,6 +171,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Zap, X, Mic, Play, Pause } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ADOBE_API_KEY } from '../adobeApiConfig';
+import { API_BASE_URL } from '../apiConfig';
 const PDFViewer = ({ file, onClose }) => {
   const viewerRef = useRef(null);
   const [insightResult, setInsightResult] = useState(null);
@@ -205,14 +206,7 @@ const PDFViewer = ({ file, onClose }) => {
       setIsInsightLoading(true);
       setInsightResult(null);
       
-      // --- THIS IS THE FIX ---
-      // Use the same dynamic URL logic for consistency
-      const isDevelopment = window.location.hostname === 'localhost';
-      const apiBaseUrl = isDevelopment 
-        ? 'http://localhost:8080' 
-        : 'https://avtech03-pdf-insight-backend.hf.space';
-      
-      const response = await fetch(`${apiBaseUrl}/api/selection-insight`, {
+      const response = await fetch(`${API_BASE_URL}/api/selection-insight`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ selected_text: copiedText }),
@@ -238,12 +232,7 @@ const PDFViewer = ({ file, onClose }) => {
       setIsTtsLoading(true);
       toast.loading("Generating audio...");
 
-      const isDevelopment = window.location.hostname === 'localhost';
-      const apiBaseUrl = isDevelopment 
-        ? 'http://localhost:8080' 
-        : 'https://avtech03-pdf-insight-backend.hf.space';
-
-      const response = await fetch(`${apiBaseUrl}/api/podcast`, {
+      const response = await fetch(`${API_BASE_URL}/api/podcast`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ context_type: 'copied_text', text_content: copiedTextRef.current }),
@@ -251,7 +240,7 @@ const PDFViewer = ({ file, onClose }) => {
       if (!response.ok) throw new Error("Failed to generate audio.");
       const data = await response.json();
 
-      const fullAudioUrl = `${apiBaseUrl}${data.audio_url}`;
+      const fullAudioUrl = `${API_BASE_URL}${data.audio_url}`;
       setAudioUrl(fullAudioUrl);
       toast.dismiss();
       toast.success("Audio ready to play.");

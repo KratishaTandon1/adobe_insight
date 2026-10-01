@@ -28,6 +28,16 @@
 
 
 # app.py (previously backend/app/main.py)
+import sys
+import os
+
+# Add root directory and backend directory to sys.path
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+_parent_dir = os.path.dirname(_current_dir)
+if _parent_dir not in sys.path:
+    sys.path.insert(0, _parent_dir)
+if _current_dir not in sys.path:
+    sys.path.insert(0, _current_dir)
 
 from fastapi import FastAPI
 from dotenv import load_dotenv
@@ -40,10 +50,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 # --- UPDATED IMPORTS ---
-# The paths are now relative to the root directory
 from backend.app import models
 from backend.app.database import engine
-from backend.app.routes import pdf, recommend, insights, chat, podcast, summarize,debate,tts,selection_insight
+from backend.app.routes import pdf, recommend, insights, chat, podcast, summarize, debate, tts, selection_insight
 
 # This creates the database table if it doesn't exist
 models.Base.metadata.create_all(bind=engine)
